@@ -1,17 +1,16 @@
 name: wird_quran
-description: "وِرد – القرآن الكريم للحفظ والمراجعة: تلاوة الشيخ الزين محمد أحمد مع تكرار دقيق للآيات بالاعتماد على توقيتات كل آية."
+description: "اِقْرَأْ وَارْتَقِ – القرآن الكريم للحفظ والمراجعة: تلاوة الشيخ الزين محمد أحمد مع تكرار دقيق للآيات بالاعتماد على توقيتات كل آية."
 publish_to: 'none'
 version: 1.2.0+3
 
 environment:
-  sdk: ^3.14.0
+  sdk: ">=3.10.0 <4.0.0"
 
 dependencies:
   flutter:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
-  cupertino_icons: ^1.0.8
   just_audio: ^0.10.5
   audio_service: ^0.18.18
   audio_session: ^0.2.2
