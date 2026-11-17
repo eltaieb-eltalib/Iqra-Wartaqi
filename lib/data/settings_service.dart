@@ -28,7 +28,12 @@ class SettingsService extends ChangeNotifier {
     dailyTarget = _prefs!.getInt('dailyTarget') ?? 10;
     standingSurah = _prefs!.getInt('standing_surah');
     standingAyah = _prefs!.getInt('standing_ayah');
-    if (standingSurah == null || standingAyah == null) {
+    if (standingSurah == null ||
+        standingAyah == null ||
+        standingSurah! < 1 ||
+        standingSurah! > 114 ||
+        standingAyah! < 1) {
+      // قيمة تالفة/خارج النطاق: تُصفَّر بدل أن تُسقط الشاشة الرئيسية لاحقًا.
       standingSurah = null;
       standingAyah = null;
     }

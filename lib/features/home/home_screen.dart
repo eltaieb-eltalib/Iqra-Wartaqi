@@ -203,6 +203,10 @@ class _StandingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final marker = app.standingMarker;
+    if (marker != null && (marker.surah < 1 || marker.surah > 114)) {
+      // علامة خارج النطاق (بيانات تالفة): تجاهلها بدل إسقاط الشاشة.
+      return const SizedBox.shrink();
+    }
     if (marker == null) {
       return Card(
         color: WirdColors.blushSurface,

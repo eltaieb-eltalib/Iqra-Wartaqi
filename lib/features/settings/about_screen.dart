@@ -14,7 +14,7 @@ class AboutScreen extends StatelessWidget {
           Text('اِقْرَأْ وَارْتَقِ – القرآن الكريم للحفظ والمراجعة',
               style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
           SizedBox(height: 6),
-          Text('الإصدار ١.٠.٠', style: TextStyle(fontSize: 16)),
+          Text('الإصدار ١.٢.٠', style: TextStyle(fontSize: 16)),
           SizedBox(height: 16),
           Text('نص القرآن الكريم',
               style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold)),

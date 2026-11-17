@@ -32,6 +32,10 @@ class MushafScreen extends StatefulWidget {
 class _MushafScreenState extends State<MushafScreen> {
   final ItemScrollController _scroll = ItemScrollController();
   final ItemPositionsListener _positions = ItemPositionsListener.create();
+  final Object _sessionOwner = Object();
+  late final AppState _appState;
+  late final AudioController _audio;
+  late final SettingsService _settingsSvc;
   Set<String> _favorites = {};
   Map<int, String> _progress = {};
   int? _lastHighlighted;
@@ -39,12 +43,18 @@ class _MushafScreenState extends State<MushafScreen> {
   @override
   void initState() {
     super.initState();
+    // نلتقط الخدمات الآن: استخدام context داخل dispose محظور وقد يرمي.
+    _appState = context.read<AppState>();
+    _audio = context.read<AudioController>();
+    _settingsSvc = context.read<SettingsService>();
+    _audio.addListener(_onAudioChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final db = context.read<AppDatabase>();
-      final app = context.read<AppState>();
+      final app = _appState;
       await app.recordPosition(
           widget.surah.number, widget.initialAyah, cleanSurahName(widget.surah));
-      await app.beginSession(widget.surah.number, 'listening');
+      await app.beginSession(widget.surah.number, 'listening',
+          owner: _sessionOwner);
       final favs = await db.favoriteKeys();
       final prog = await db.progressForSurah(widget.surah.number);
       if (!mounted) return;
@@ -54,7 +64,7 @@ class _MushafScreenState extends State<MushafScreen> {
       });
       if (widget.initialAyah > 1) _jumpTo(widget.initialAyah);
       if (widget.autoplay) {
-        await context.read<AudioController>().playSurah(
+        await _audio.playSurah(
               widget.surah.number,
               fromAyah: widget.initialAyah,
               surahName: cleanSurahName(widget.surah),
@@ -63,9 +73,26 @@ class _MushafScreenState extends State<MushafScreen> {
     });
   }
 
+  /// تمرير تلقائي لآية التلاوة الجارية — كردّ فعل على تغيّر الصوت،
+  /// لا كأثر جانبي داخل build.
+  void _onAudioChanged() {
+    if (!mounted) return;
+    if (_audio.currentSurah != widget.surah.number) return;
+    final highlighted = _audio.currentAyah;
+    if (highlighted != null &&
+        highlighted != _lastHighlighted &&
+        _settingsSvc.autoScroll) {
+      _lastHighlighted = highlighted;
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => _jumpTo(highlighted));
+    }
+  }
+
   @override
   void dispose() {
-    context.read<AppState>().endSession();
+    _audio.removeListener(_onAudioChanged);
+    // ننهي جلستنا نحن فقط (بمالكنا) وبلا context — dispose متزامن بطبيعته.
+    _appState.endSession(owner: _sessionOwner).catchError((_) {});
     super.dispose();
   }
 
@@ -84,6 +111,7 @@ class _MushafScreenState extends State<MushafScreen> {
     final db = context.read<AppDatabase>();
     final audio = context.read<AudioController>();
     final app = context.read<AppState>();
+    final settingsSvc = context.read<SettingsService>();
     final isFav = _favorites.contains('${ayah.surah}:${ayah.numberInSurah}');
     final action = await showModalBottomSheet<String>(
       context: context,
@@ -157,8 +185,11 @@ class _MushafScreenState extends State<MushafScreen> {
         final favs = await db.favoriteKeys();
         if (mounted) setState(() => _favorites = favs);
       case 'mastered':
+        final alreadyMastered = _progress[ayah.numberInSurah] == 'mastered';
         await db.setAyahStatus(ayah.surah, ayah.numberInSurah, 'mastered');
-        await db.addDailyDone(1);
+        if (!alreadyMastered) {
+          await db.addDailyDone(1, targetAyahs: settingsSvc.dailyTarget);
+        }
         await app.advanceStandingForMastered(
             ayah.surah, ayah.numberInSurah);
         if (mounted) {
@@ -181,13 +212,6 @@ class _MushafScreenState extends State<MushafScreen> {
     final standingHere = marker != null && marker.surah == widget.surah.number;
     final isCurrentSurah = audio.currentSurah == widget.surah.number;
     final highlighted = isCurrentSurah ? audio.currentAyah : null;
-    if (highlighted != null &&
-        highlighted != _lastHighlighted &&
-        settings.autoScroll) {
-      _lastHighlighted = highlighted;
-      WidgetsBinding.instance
-          .addPostFrameCallback((_) => _jumpTo(highlighted));
-    }
     final showBismillah = widget.surah.number != 1 && widget.surah.number != 9;
     return Scaffold(
       appBar: AppBar(

@@ -6,18 +6,22 @@ import 'models.dart';
 /// قاعدة البيانات المحلية: تقدّم الحفظ، المفضلة، النطاقات المحفوظة،
 /// الجلسات، والأهداف اليومية. كل شيء محلي دون حساب أو إنترنت.
 class AppDatabase {
-  Database? _db;
+  Future<Database>? _dbFuture;
 
-  Future<Database> get db async {
-    _db ??= await _open();
-    return _db!;
-  }
+  /// نحفظ الـ Future نفسه لا نتيجته: استدعاءان متزامنان أول مرة
+  /// يتشاركان فتحًا واحدًا بدل فتح قاعدة البيانات مرتين.
+  Future<Database> get db => _dbFuture ??= _open();
 
   Future<Database> _open() async {
     final dir = await getDatabasesPath();
     return openDatabase(
       p.join(dir, 'wird.db'),
       version: 1,
+      onUpgrade: (db, oldVersion, newVersion) async {
+        // نقطة الترحيل الرسمية: أي تغيير مستقبلي في المخطط يُنفَّذ هنا
+        // بزيادات متسلسلة (oldVersion < 2، < 3، ...) دون فقدان بيانات.
+        // الإصدار الحالي 1 هو الأساس، فلا خطوات بعد.
+      },
       onCreate: (db, _) async {
         await db.execute('''
           CREATE TABLE ayah_progress(
@@ -81,6 +85,32 @@ class AppDatabase {
     );
   }
 
+  /// تعليم نطاق كامل دفعة واحدة (معاملة + دفعة)، ويعيد عدد الآيات التي
+  /// تغيّرت حالتها فعليًا — حتى لا يتضخّم عدّاد الهدف اليومي بإعادة التعليم.
+  Future<int> setRangeStatus(
+      int surah, int fromAyah, int toAyah, String status) async {
+    final d = await db;
+    var changed = 0;
+    await d.transaction((txn) async {
+      final rows = await txn.query('ayah_progress',
+          where: 'surah = ?', whereArgs: [surah]);
+      final prev = {for (final r in rows) r['ayah'] as int: r['status'] as String};
+      final batch = txn.batch();
+      final now = DateTime.now().millisecondsSinceEpoch;
+      for (var a = fromAyah; a <= toAyah; a++) {
+        if (prev[a] == status) continue;
+        changed++;
+        batch.insert(
+          'ayah_progress',
+          {'surah': surah, 'ayah': a, 'status': status, 'updated_at': now},
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+      await batch.commit(noResult: true);
+    });
+    return changed;
+  }
+
   Future<Map<String, int>> progressCounts() async {
     final d = await db;
     final rows = await d.rawQuery(
@@ -105,18 +135,25 @@ class AppDatabase {
   // ---------- المفضلة ----------
   Future<void> toggleFavorite(int surah, int ayah) async {
     final d = await db;
-    final existing = await d.query('favorites',
-        where: 'surah = ? AND ayah = ?', whereArgs: [surah, ayah]);
-    if (existing.isEmpty) {
-      await d.insert('favorites', {
-        'surah': surah,
-        'ayah': ayah,
-        'created_at': DateTime.now().millisecondsSinceEpoch,
-      });
-    } else {
-      await d.delete('favorites',
+    // داخل معاملة واحدة: نقرتان سريعتان لا تُحدثان تعارض مفتاح أساسي.
+    await d.transaction((txn) async {
+      final existing = await txn.query('favorites',
           where: 'surah = ? AND ayah = ?', whereArgs: [surah, ayah]);
-    }
+      if (existing.isEmpty) {
+        await txn.insert(
+          'favorites',
+          {
+            'surah': surah,
+            'ayah': ayah,
+            'created_at': DateTime.now().millisecondsSinceEpoch,
+          },
+          conflictAlgorithm: ConflictAlgorithm.ignore,
+        );
+      } else {
+        await txn.delete('favorites',
+            where: 'surah = ? AND ayah = ?', whereArgs: [surah, ayah]);
+      }
+    });
   }
 
   Future<Set<String>> favoriteKeys() async {
@@ -188,12 +225,12 @@ class AppDatabase {
         where: 'day = ?', whereArgs: [_dayKey(DateTime.now())]);
   }
 
-  Future<void> addDailyDone(int ayahs) async {
+  Future<void> addDailyDone(int ayahs, {int? targetAyahs}) async {
     final d = await db;
     final key = _dayKey(DateTime.now());
     await d.insert(
       'daily_goals',
-      {'day': key, 'target_ayahs': 10, 'done_ayahs': 0},
+      {'day': key, 'target_ayahs': targetAyahs ?? 10, 'done_ayahs': 0},
       conflictAlgorithm: ConflictAlgorithm.ignore,
     );
     await d.rawUpdate(

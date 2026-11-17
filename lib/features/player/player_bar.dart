@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../app_state.dart';
 import '../../core/theme.dart';
 import '../audio/audio_controller.dart';
 import 'player_screen.dart';
@@ -16,9 +15,8 @@ class PlayerBar extends StatelessWidget {
     if (audio.kind == PlaybackKind.idle || audio.currentSurah == null) {
       return const SizedBox.shrink();
     }
-    final app = context.read<AppState>();
-    final title = app.lastSurahName.isNotEmpty
-        ? app.lastSurahName
+    final title = audio.currentSurahName.isNotEmpty
+        ? audio.currentSurahName
         : 'سورة رقم ${toArabicDigits(audio.currentSurah!)}';
     final repeatInfo = audio.isRepetition && audio.currentSegment != null
         ? ' — التكرار ${toArabicDigits(audio.currentRepeatIndex ?? 1)}'

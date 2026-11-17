@@ -197,4 +197,85 @@ void main() {
     );
     expect(engine.gapSeconds, 4);
   });
+
+  auditFixesTests();
+}
+
+/// اختبارات إصلاحات تدقيق 2026-11-18: التخطي اليدوي والتحقق من المُدخلات.
+void auditFixesTests() {
+  group('RepetitionEngine — audit fixes (skip + validation)', () {
+    test('skipToNextUnit jumps a whole unit without counting a repetition', () {
+      final engine = RepetitionEngine(
+        config: const RepetitionConfig(mode: RepetitionMode.perAyah, repeatCount: 3),
+        timings: fakeTimings(10),
+        surah: 1,
+        fromAyah: 1,
+        toAyah: 3,
+      );
+      // نحن على الآية 1 التكرار 1 — التخطي يذهب للآية 2 مباشرة
+      final next = engine.skipToNextUnit();
+      expect(next?.fromAyah, 2);
+      expect(next?.repeatIndex, 1);
+      expect(engine.completedSegments, 0);
+      // تخطٍّ من آخر وحدة ينهي الخطة دون احتساب
+      engine.skipToNextUnit();
+      expect(engine.skipToNextUnit(), isNull);
+      expect(engine.isFinished, isTrue);
+      expect(engine.completedSegments, 0);
+    });
+
+    test('skipToNextUnit in infinite mode wraps without finishing', () {
+      final engine = RepetitionEngine(
+        config: const RepetitionConfig(mode: RepetitionMode.perAyah, repeatCount: -1),
+        timings: fakeTimings(5),
+        surah: 1,
+        fromAyah: 1,
+        toAyah: 2,
+      );
+      expect(engine.skipToNextUnit()?.fromAyah, 2);
+      final wrapped = engine.skipToNextUnit();
+      expect(wrapped?.fromAyah, 1);
+      expect(engine.isFinished, isFalse);
+      expect(engine.completedSegments, 0);
+    });
+
+    test('constructor rejects fromAyah < 1', () {
+      expect(
+        () => RepetitionEngine(
+          config: const RepetitionConfig(),
+          timings: fakeTimings(5),
+          surah: 1,
+          fromAyah: 0,
+          toAyah: 2,
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('constructor rejects a range with a missing timing', () {
+      expect(
+        () => RepetitionEngine(
+          config: const RepetitionConfig(),
+          timings: fakeTimings(3), // لا توقيت للآية 5
+          surah: 1,
+          fromAyah: 1,
+          toAyah: 5,
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('constructor rejects negative gapSeconds', () {
+      expect(
+        () => RepetitionEngine(
+          config: const RepetitionConfig(gapSeconds: -1),
+          timings: fakeTimings(5),
+          surah: 1,
+          fromAyah: 1,
+          toAyah: 2,
+        ),
+        throwsArgumentError,
+      );
+    });
+  });
 }

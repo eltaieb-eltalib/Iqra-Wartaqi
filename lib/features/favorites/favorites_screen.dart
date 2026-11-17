@@ -9,8 +9,15 @@ import '../mushaf/mushaf_screen.dart';
 import '../range/range_picker_screen.dart';
 
 /// المفضلة: آيات مفضلة + نطاقات محفوظة، والنقر يفتح أو يشغّل.
-class FavoritesScreen extends StatelessWidget {
+class FavoritesScreen extends StatefulWidget {
   const FavoritesScreen({super.key});
+
+  @override
+  State<FavoritesScreen> createState() => _FavoritesScreenState();
+}
+
+class _FavoritesScreenState extends State<FavoritesScreen> {
+  int _refreshTick = 0; // يُزاد بعد الحذف لإعادة بناء القوائم فورًا
 
   @override
   Widget build(BuildContext context) {
@@ -25,6 +32,7 @@ class FavoritesScreen extends StatelessWidget {
               style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           FutureBuilder<List<Map<String, dynamic>>>(
+            key: ValueKey('fav-$_refreshTick'),
             future: db.favorites(),
             builder: (context, snap) {
               final rows = snap.data ?? [];
@@ -69,6 +77,7 @@ class FavoritesScreen extends StatelessWidget {
               style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           FutureBuilder(
+            key: ValueKey('ranges-$_refreshTick'),
             future: db.savedRanges(),
             builder: (context, snap) {
               final ranges = snap.data ?? [];
@@ -92,6 +101,8 @@ class FavoritesScreen extends StatelessWidget {
                           tooltip: 'حذف النطاق',
                           onPressed: () async {
                             await db.deleteRange(r.id!);
+                            if (!mounted) return;
+                            setState(() => _refreshTick++);
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(content: Text('تم حذف النطاق')));
@@ -104,6 +115,7 @@ class FavoritesScreen extends StatelessWidget {
                             builder: (_) => RangePickerScreen(
                               surah: repo.surah(r.surah),
                               initialFrom: r.fromAyah,
+                              initialTo: r.toAyah,
                               sessionMode: r.kind,
                             ),
                           ),
