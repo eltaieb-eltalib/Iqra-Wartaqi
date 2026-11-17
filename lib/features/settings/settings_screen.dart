@@ -148,7 +148,7 @@ class SettingsScreen extends StatelessWidget {
                     style: const TextStyle(fontSize: 16),
                   ),
                   subtitle: prog != null
-                      ? LinearProgressIndicator(value: prog)
+                      ? LinearProgressIndicator(value: prog < 0 ? null : prog)
                       : Text(downloaded ? 'محمّلة — تعمل دون إنترنت' : 'غير محمّلة'),
                   trailing: downloaded
                       ? IconButton(
