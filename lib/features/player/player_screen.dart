@@ -17,6 +17,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   double _volume = 1;
 
   @override
+  void initState() {
+    super.initState();
+    _volume = context.read<AudioController>().volume;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final audio = context.watch<AudioController>();
     final app = context.read<AppState>();
@@ -31,8 +37,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
             const Icon(Icons.headphones, size: 84, color: WirdColors.pink),
             const SizedBox(height: 16),
             Text(
-              app.lastSurahName.isNotEmpty
-                  ? app.lastSurahName
+              audio.currentSurahName.isNotEmpty
+                  ? audio.currentSurahName
                   : 'سورة رقم ${toArabicDigits(audio.currentSurah ?? 1)}',
               style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
             ),
