@@ -27,7 +27,11 @@ class _SurahIndexScreenState extends State<SurahIndexScreen> {
     final marker = app.standingMarker;
     var list = repo.searchSurahs(_query);
     if (_juzFilter != null) {
-      list = list.where((s) => s.juz == _juzFilter).toList();
+      // سور كثيرة تمتد عبر أكثر من جزء (البقرة: ١–٣)، فالتصفية بأي آية
+      // داخل الجزء لا بجزء أول آية فقط.
+      list = list
+          .where((s) => s.ayahs.any((a) => a.juz == _juzFilter))
+          .toList();
     }
     return Scaffold(
       appBar: AppBar(
