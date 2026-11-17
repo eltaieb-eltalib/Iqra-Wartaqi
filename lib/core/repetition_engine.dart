@@ -125,11 +125,23 @@ class RepetitionEngine {
     required this.fromAyah,
     required this.toAyah,
   }) : _timings = List.of(timings)..sort((a, b) => a.ayah.compareTo(b.ayah)) {
+    if (fromAyah < 1) {
+      throw ArgumentError('fromAyah ($fromAyah) must be >= 1');
+    }
     if (fromAyah > toAyah) {
       throw ArgumentError('fromAyah ($fromAyah) must be <= toAyah ($toAyah)');
     }
     if (config.repeatCount == 0 || config.repeatCount < -1) {
       throw ArgumentError('repeatCount must be >= 1 or -1 (infinite)');
+    }
+    if (config.gapSeconds < 0) {
+      throw ArgumentError('gapSeconds must be >= 0');
+    }
+    // كل آية في النطاق يجب أن يكون لها توقيت، وإلا فالمقطع مستحيل التشغيل.
+    for (var a = fromAyah; a <= toAyah; a++) {
+      if (!_timings.any((t) => t.ayah == a)) {
+        throw ArgumentError('No timing found for ayah $a in surah $surah');
+      }
     }
     _units = _buildUnits();
   }
@@ -215,6 +227,29 @@ class RepetitionEngine {
     } else {
       _repeatIndex++;
     }
+    return current;
+  }
+
+  /// تخطٍّ يدوي إلى الوحدة التالية (آية/مجموعة) دون احتساب أي تكرار:
+  /// لا يزيد [completedSegments] ولا يستهلك تكرارًا من الوحدة الحالية.
+  /// يعيد مقطع الوحدة التالية أو null عند نهاية الخطة.
+  RepeatSegment? skipToNextUnit() {
+    if (_finished) return null;
+    if (config.isInfinite) {
+      if (_unitIndex >= _units.length - 1) {
+        _unitIndex = 0;
+        _repeatIndex++; // دورة جديدة
+      } else {
+        _unitIndex++;
+      }
+      return current;
+    }
+    if (_unitIndex >= _units.length - 1) {
+      _finished = true;
+      return null;
+    }
+    _unitIndex++;
+    _repeatIndex = 1;
     return current;
   }
 

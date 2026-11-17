@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 
 import 'core/standing_marker.dart';
@@ -57,8 +55,13 @@ class AppState extends ChangeNotifier {
   int? lastSurah;
   int? lastAyah;
   String lastSurahName = '';
+
+  /// رمز مالك جلسات التكرار (تشاركه شاشة النطاق وربط main عند انتهاء الخطة).
+  static final Object repetitionSessionOwner = Object();
+
   int? _sessionId;
   DateTime? _sessionStart;
+  Object? _sessionOwner;
 
   Future<void> loadLastPosition() async {
     final s = await db.readKv('last_surah');
@@ -79,26 +82,35 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> beginSession(int? surah, String mode) async {
+  /// بدء جلسة جديدة لمالك معيّن. أي جلسة مفتوحة سابقة تُنهى أولًا بمدتها
+  /// الحقيقية (لا تبقى يتيمة بمدة صفر، ولا تنهي شاشةٌ جلسةَ غيرها).
+  Future<void> beginSession(int? surah, String mode, {Object? owner}) async {
+    if (_sessionId != null) await endSession();
     _sessionStart = DateTime.now();
+    _sessionOwner = owner;
     _sessionId = await db.startSession(surah, mode);
   }
 
-  Future<void> endSession() async {
+  /// إنهاء الجلسة المفتوحة. عند تمرير [owner] لا تُنهى إلا جلسة ذلك المالك.
+  Future<void> endSession({Object? owner}) async {
+    if (owner != null && _sessionOwner != null && _sessionOwner != owner) {
+      return; // الجلسة المفتوحة ليست لهذا المالك
+    }
     if (_sessionId != null && _sessionStart != null) {
       final seconds = DateTime.now().difference(_sessionStart!).inSeconds;
       if (seconds > 0) await db.endSession(_sessionId!, seconds);
     }
     _sessionId = null;
     _sessionStart = null;
+    _sessionOwner = null;
   }
 
   Future<void> markRangeStatus(
       int surah, int fromAyah, int toAyah, String status) async {
-    for (var a = fromAyah; a <= toAyah; a++) {
-      await db.setAyahStatus(surah, a, status);
+    final changed = await db.setRangeStatus(surah, fromAyah, toAyah, status);
+    if (changed > 0) {
+      await db.addDailyDone(changed, targetAyahs: settings?.dailyTarget);
     }
-    await db.addDailyDone(toAyah - fromAyah + 1);
     if (status == 'mastered') {
       await advanceStandingForMastered(surah, toAyah);
     }

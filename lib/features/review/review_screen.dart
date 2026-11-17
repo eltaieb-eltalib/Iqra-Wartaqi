@@ -104,6 +104,7 @@ class ReviewScreen extends StatelessWidget {
                             builder: (_) => RangePickerScreen(
                               surah: repo.surah(r.surah),
                               initialFrom: r.fromAyah,
+                              initialTo: r.toAyah,
                               sessionMode: 'review',
                             ),
                           ),

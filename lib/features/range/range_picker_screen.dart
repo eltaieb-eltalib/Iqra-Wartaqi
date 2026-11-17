@@ -15,11 +15,15 @@ import '../home/home_screen.dart';
 class RangePickerScreen extends StatefulWidget {
   final Surah surah;
   final int initialFrom;
+
+  /// نهاية النطاق الابتدائية (للنطاقات المحفوظة). null = آخر السورة.
+  final int? initialTo;
   final String sessionMode; // memorization | review | listening
   const RangePickerScreen({
     super.key,
     required this.surah,
     this.initialFrom = 1,
+    this.initialTo,
     this.sessionMode = 'memorization',
   });
 
@@ -40,9 +44,11 @@ class _RangePickerScreenState extends State<RangePickerScreen> {
   void initState() {
     super.initState();
     _from = widget.initialFrom;
-    _to = widget.surah.ayahCount;
+    _to = widget.initialTo ?? widget.surah.ayahCount;
+    if (_to < _from) _to = _from;
     _gap = 1;
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       final s = context.read<SettingsService>();
       setState(() {
         _repeatCount = s.defaultRepeatCount;
@@ -79,20 +85,31 @@ class _RangePickerScreenState extends State<RangePickerScreen> {
         return;
       }
     }
-    final engine = RepetitionEngine(
-      config: RepetitionConfig(
-        mode: _mode,
-        repeatCount: count,
-        groupSize: _groupSize,
-        gapSeconds: _gap,
-      ),
-      timings: timings,
-      surah: widget.surah.number,
-      fromAyah: _from,
-      toAyah: _to,
-    );
-    await app.beginSession(widget.surah.number,
-        widget.sessionMode == 'review' ? 'review' : 'memorization');
+    final RepetitionEngine engine;
+    try {
+      engine = RepetitionEngine(
+        config: RepetitionConfig(
+          mode: _mode,
+          repeatCount: count,
+          groupSize: _groupSize,
+          gapSeconds: _gap,
+        ),
+        timings: timings,
+        surah: widget.surah.number,
+        fromAyah: _from,
+        toAyah: _to,
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('نطاق التكرار غير صالح لهذه السورة')));
+      }
+      return;
+    }
+    await app.beginSession(
+        widget.surah.number,
+        widget.sessionMode == 'review' ? 'review' : 'memorization',
+        owner: AppState.repetitionSessionOwner);
     await app.recordPosition(
         widget.surah.number, _from, cleanSurahName(widget.surah));
     await audio.playRepetition(engine,
@@ -254,18 +271,28 @@ class _RangePickerScreenState extends State<RangePickerScreen> {
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: () => context
-                      .read<AppState>()
-                      .markRangeStatus(widget.surah.number, _from, _to, 'learning'),
+                  onPressed: () async {
+                    final messenger = ScaffoldMessenger.of(context);
+                    await context.read<AppState>().markRangeStatus(
+                        widget.surah.number, _from, _to, 'learning');
+                    if (!mounted) return;
+                    messenger.showSnackBar(
+                        const SnackBar(content: Text('اتعلّم النطاق: قيد الحفظ')));
+                  },
                   child: const Text('تعليم: قيد الحفظ'),
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: OutlinedButton(
-                  onPressed: () => context
-                      .read<AppState>()
-                      .markRangeStatus(widget.surah.number, _from, _to, 'mastered'),
+                  onPressed: () async {
+                    final messenger = ScaffoldMessenger.of(context);
+                    await context.read<AppState>().markRangeStatus(
+                        widget.surah.number, _from, _to, 'mastered');
+                    if (!mounted) return;
+                    messenger.showSnackBar(const SnackBar(
+                        content: Text('ما شاء الله — اتعلّم النطاق: أتقنتها')));
+                  },
                   child: const Text('تعليم: أتقنتها'),
                 ),
               ),

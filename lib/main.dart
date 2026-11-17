@@ -47,6 +47,16 @@ Future<void> main() async {
   final audio = AudioController(handler: handler, repo: repo, downloads: downloads);
   final appState = AppState(db, settings: settings);
   appState.ayahCountResolver = (n) => repo.surah(n).ayahCount;
+  // آخر موضع يتبع التلاوة الجارية فعليًا، لا موضع فتح السورة فقط.
+  audio.onPositionChanged = (surah, ayah) {
+    appState
+        .recordPosition(surah, ayah, cleanSurahName(repo.surah(surah)))
+        .catchError((_) {});
+  };
+  // انتهاء خطة التكرار (طبيعيًا أو بالإيقاف) ينهي جلستها المسجلة.
+  audio.onRepetitionFinished = () {
+    appState.endSession(owner: AppState.repetitionSessionOwner).catchError((_) {});
+  };
   await appState.loadLastPosition();
 
   runApp(

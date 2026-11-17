@@ -6,29 +6,45 @@ import 'package:just_audio/just_audio.dart';
 
 /// معالج الصوت الخلفي: مشغّل واحد فقط (just_audio) داخل audio_service،
 /// مع معالجة مقاطعات الصوت (المكالمات وغيرها) عبر audio_session.
+///
+/// أزرار التخطي/الإيقاف في الإشعار وشاشة القفل تُفوَّض إلى [AudioController]
+/// عبر هذه الحقول (تُضبط عند إنشاء المتحكم)، لأن منطق الآيات والتكرار عنده.
 class WirdAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   final AudioPlayer player = AudioPlayer();
-  StreamSubscription<PlaybackEvent>? _eventSub;
+  final List<StreamSubscription<dynamic>> _subs = [];
+
+  /// تفويض «التالي» من الإشعار (يضبطه AudioController).
+  Future<void> Function()? onSkipToNext;
+
+  /// تفويض «السابق» من الإشعار (يضبطه AudioController).
+  Future<void> Function()? onSkipToPrevious;
+
+  /// يُستدعى بعد توقّف المشغّل من الإشعار/النظام لمزامنة حالة المتحكم.
+  void Function()? onStopRequested;
 
   WirdAudioHandler() {
     _initSession();
-    _eventSub = player.playbackEventStream.listen((_) => _broadcastState());
-    player.processingStateStream.listen((_) => _broadcastState());
-    player.playingStream.listen((_) => _broadcastState());
+    _subs.add(player.playbackEventStream.listen((_) => _broadcastState()));
+    _subs.add(player.processingStateStream.listen((_) => _broadcastState()));
+    _subs.add(player.playingStream.listen((_) => _broadcastState()));
   }
 
   Future<void> _initSession() async {
-    final session = await AudioSession.instance;
-    await session.configure(const AudioSessionConfiguration.speech());
-    session.interruptionEventStream.listen((event) {
-      if (event.begin) {
-        // مقاطعة (مكالمة...): إيقاف مؤقت، والاستئناف فقط إذا سمح النظام.
+    try {
+      final session = await AudioSession.instance;
+      await session.configure(const AudioSessionConfiguration.speech());
+      _subs.add(session.interruptionEventStream.listen((event) {
+        if (event.begin) {
+          // مقاطعة (مكالمة...): إيقاف مؤقت، والاستئناف فقط إذا سمح النظام.
+          if (player.playing) player.pause();
+        }
+      }));
+      _subs.add(session.becomingNoisyEventStream.listen((_) {
         if (player.playing) player.pause();
-      }
-    });
-    session.becomingNoisyEventStream.listen((_) {
-      if (player.playing) player.pause();
-    });
+      }));
+    } catch (_) {
+      // تعذّرت تهيئة جلسة الصوت: التشغيل الأساسي يعمل دون معالجة المقاطعات.
+    }
   }
 
   void _broadcastState() {
@@ -75,13 +91,29 @@ class WirdAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   Future<void> stop() async {
     await player.stop();
     await super.stop();
+    onStopRequested?.call();
   }
 
   @override
   Future<void> seek(Duration position) => player.seek(position);
 
+  @override
+  Future<void> skipToNext() async {
+    final f = onSkipToNext;
+    if (f != null) await f();
+  }
+
+  @override
+  Future<void> skipToPrevious() async {
+    final f = onSkipToPrevious;
+    if (f != null) await f();
+  }
+
   Future<void> dispose() async {
-    await _eventSub?.cancel();
+    for (final sub in _subs) {
+      await sub.cancel();
+    }
+    _subs.clear();
     await player.dispose();
   }
 }
