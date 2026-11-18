@@ -2,4 +2,6 @@
 <resources>
     <!-- خلفية أيقونة التطبيق التكيفية: الوردي العميق لهوية «وِرد» البمبي -->
     <color name="ic_launcher_background">#AD1457</color>
+    <!-- خلفية شاشة البداية -->
+    <color name="launch_background">#FFFFF0F5</color>
 </resources>
